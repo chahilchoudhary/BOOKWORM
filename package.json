@@ -1,0 +1,22 @@
+{
+  "name": "bookworm",
+  "private": true,
+  "version": "0.0.0",
+  "description": "Book Worm monorepo root: orchestration scripts and git hooks only",
+  "engines": {
+    "node": ">=22.12.0"
+  },
+  "scripts": {
+    "setup": "npm install && npm --prefix backend install && npm --prefix frontend install",
+    "dev": "node -e \"const {spawn}=require('node:child_process');for(const p of ['backend','frontend'])spawn('npm --prefix '+p+' run dev',{stdio:'inherit',shell:true})\"",
+    "lint": "npm --prefix backend run lint && npm --prefix frontend run lint",
+    "typecheck": "npm --prefix backend run typecheck && npm --prefix frontend run typecheck",
+    "test": "npm --prefix backend test && npm --prefix frontend test",
+    "format": "npm --prefix backend run format && npm --prefix frontend run format",
+    "prepare": "husky"
+  },
+  "devDependencies": {
+    "husky": "^9.1.7",
+    "lint-staged": "^17.6.2"
+  }
+}
