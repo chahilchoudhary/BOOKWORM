@@ -2,7 +2,7 @@
   "name": "bookworm",
   "private": true,
   "version": "0.0.0",
-  "description": "Book Worm online bookstore (React + Express + SQLite)",
+  "description": "Book Worm online bookstore (React + Express + PostgreSQL)",
   "engines": {
     "node": ">=22.12.0"
   },
