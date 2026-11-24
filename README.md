@@ -1,68 +1,129 @@
-# Book Worm
+# Book Worm – Online Bookstore
 
-Online bookstore: React SPA + Express REST API + PostgreSQL 16.
-Requirements, architecture and task plan live in [`docs/`](docs/) (start with `00-READ-FIRST-BOB-RULES.md`).
+A responsive e-commerce web app where a customer can browse, select and buy books.
 
-Status: **T00 – repo scaffold only.** The API exposes `GET /api/health`; the frontend shows a placeholder page.
+**Stack:** React 18 + TypeScript + Tailwind CSS (frontend) · Node.js + Express + TypeScript (API) · PostgreSQL (database)
+
+## What you can do
+
+- Log in or create an account (guests can browse, but need to log in to buy)
+- Browse by **category** and filter by **language, format, publisher, price**; search by title or author; sort
+- Home shelves: **Recommended for You** (based on your order history), **Bestsellers this Month**, **New Launches**
+- Open a book: price, tentative **delivery date**, rating, reviews (max 100 characters), **related reads**
+- Add to **cart**, change quantities, apply a **coupon**, redeem **gift points**
+- Enter or reuse a saved **delivery address** (validated)
+- **Pay** by credit card, debit card, UPI or wallet (simulated gateway) and see the **purchase confirmation**
+- **My Orders** with **Buy it again** and **Cancel within 48 hours**
+- **My Wishlist** and **My Writers** (authors of books you bought)
 
 ## Prerequisites
 
-- Node.js **22.12 or newer** (LTS) and npm
-- Docker with Compose (for PostgreSQL). The compose file pulls Red Hat images, so run `docker login registry.redhat.io` first.
+- **Node.js 22.12 or newer**
+- **PostgreSQL 14 or newer**, running on `127.0.0.1:5432`, with a user that can create databases (default: user `bookworm`, password `bookworm`)
 
-## Run
+## Quick start
 
 ```bash
-# 1. install all three package.json files (root hooks, backend, frontend)
+# 1. install packages for both apps (once)
 npm run setup
 
-# 2. create local env files (git-ignored) from the examples
-cp backend/.env.example backend/.env      # Windows: Copy-Item backend/.env.example backend/.env
-cp frontend/.env.example frontend/.env    # Windows: Copy-Item frontend/.env.example frontend/.env
+# 2. configure the API (once) – edit DATABASE_URL if your Postgres differs
+cp backend/.env.example backend/.env
 
-# 3. start PostgreSQL (5432) and the test PostgreSQL (5433)
-docker compose up -d postgres postgres-test
+# 3. start the API (terminal 1) -> http://localhost:4000
+npm run dev:backend
 
-# 4. start API (http://127.0.0.1:4000) and web app (http://127.0.0.1:5173)
-npm run dev
+# 4. start the website (terminal 2) -> http://localhost:5173
+npm run dev:frontend
 ```
 
-Check it: `curl http://127.0.0.1:4000/api/health` returns `{"status":"ok"}`.
+On its first start the API creates the `bookworm` database, the tables and the demo data. Starting it again never duplicates data. To reset everything, drop the `bookworm` database and restart the API.
 
-The backend validates its environment with zod in `backend/src/config/env.ts` and exits with a message listing every missing or invalid variable if `backend/.env` is absent or wrong.
-Change `JWT_SECRET` (min 32 characters) in your local `.env`; never commit `.env`.
+Open **http://localhost:5173** and log in with a demo account below.
 
-## Scripts
+## Demo accounts and test data
 
-Run from the repo root (each runs in both packages) or with `npm --prefix backend|frontend run <script>`.
+| What | Value |
+|---|---|
+| Demo user (has order history, 500 gift points) | `demo@bookworm.test` / `Password123!` |
+| New user (no history) | `new@bookworm.test` / `Password123!` |
+| Coupons | `WELCOME100` (₹100 off, orders ₹300+) · `SAVE10` (10% off) |
+| Card that succeeds | `4111 1111 1111 1111`, any name, 3-digit CVV, expiry in the future as `MM/YYYY` |
+| Card that is declined | `4000 0000 0000 0002` |
+| UPI | any `name@bank` |
 
-| Script              | What it does                          |
-| ------------------- | ------------------------------------- |
-| `npm run dev`       | API and web app together              |
-| `npm run lint`      | ESLint (typescript-eslint), 0 warnings |
-| `npm run typecheck` | `tsc --noEmit`, strict                |
-| `npm test`          | Vitest (one run)                      |
-| `npm run format`    | Prettier write                        |
+Payments are **simulated**. No real payment is made and no card number or CVV is ever stored.
 
-Per package: `build` (backend: `tsc` to `dist/`; frontend: `tsc` + `vite build`).
+## Try the main journey (about 2 minutes)
 
-A husky `pre-commit` hook runs lint-staged (ESLint + Prettier on staged files) and the type-check.
+1. Log in as `demo@bookworm.test`. Home shows *Recommended for You* based on the demo user's past orders.
+2. Open any book → **Add to Cart**. The cart badge in the top bar updates.
+3. Open the cart → fill in the address (or tick **Use Saved Address**) → apply `WELCOME100` → **Pay Now**.
+4. Choose **Credit Card**, enter `4111 1111 1111 1111` → **Pay Now** → confirmation page.
+5. Open **My Orders**: the new order has **Cancel order** (available for 48 hours). Older orders don't.
 
-## Layout
+## Business rules (all calculated on the server, in `backend/src/pricing.ts`)
+
+| Rule | Value |
+|---|---|
+| Tax | 12% of the amount after discount and points |
+| Delivery | Free for orders of ₹300 or more, otherwise ₹40 |
+| Delivery date | Order date + 5 days (eBooks are instant) |
+| Gift points | 1 point = ₹1, at most 20% of the bill; earn 1 point per ₹100 paid |
+| Cancellation | Only while the order is confirmed and within 48 hours of placing it |
+
+The browser only displays totals; it never calculates prices.
+
+## Tests
+
+```bash
+npm test            # backend + frontend
+npm run typecheck
+```
+
+- **Backend (20 tests):** pricing, coupons, points, the 48-hour rule, auth, catalogue filters, reviews, and the full cart → checkout → cancel flow against a real PostgreSQL database.
+- **Frontend (6 tests):** routing and login redirect, form validation, card and date helpers.
+- The backend tests use a **separate database `bookworm_test`**, which is wiped on every run, so your real data is never touched. Set `TEST_DATABASE_URL` to use another server.
+
+## Project structure
 
 ```
-backend/    Express 4 + TypeScript API (src/app.ts builds the app, src/server.ts listens)
-frontend/   Vite + React 18 + TypeScript + Tailwind 3
-docs/       requirements, architecture, task plan, wireframes
+backend/
+  openapi.yaml           API specification (OpenAPI 3)
+  src/
+    app.ts, server.ts    Express app and startup
+    db.ts                PostgreSQL pool, tables, query and transaction helpers
+    seed.ts              demo books, users, coupons, order history
+    pricing.ts           price / coupon / points / cancel-window / payment rules
+    http.ts              login check, input validation, error handling
+    routes/              auth, books (+reviews), cart (+wishlist), orders
+  tests/                 pricing unit tests and API integration tests
+frontend/
+  src/
+    api.ts, auth.tsx, cart.tsx, hooks.ts, format.ts
+    components/          Navbar, protected routes, shared UI (cards, stars, breadcrumbs)
+    pages/               Home, Book, Cart/Checkout, Payment, Confirmation, Orders, Wishlist, Authors, Login/Register
+docs/
+  DATA-MODEL.md          database design and diagram
+  design/                the wireframes this UI was built from
 ```
 
-Full folder structure: `docs/02-ARCHITECTURE.md` §4.
+## API
 
-## Databases
+The full list of endpoints is in [`backend/openapi.yaml`](backend/openapi.yaml). All endpoints are under `/api`; errors are returned as `{ "error": "message" }`.
 
-| Service         | Host port | Database        | Used for            |
-| --------------- | --------- | --------------- | ------------------- |
-| `postgres`      | 5432      | `bookworm`      | development         |
-| `postgres-test` | 5433      | `bookworm_test` | automated tests     |
+## Database
 
-Both listen on `127.0.0.1` only. Default credentials (`bookworm` / `bookworm`) are for local development; override with `POSTGRES_USER`, `POSTGRES_PASSWORD` in a git-ignored root `.env`.
+See [`docs/DATA-MODEL.md`](docs/DATA-MODEL.md). To look at the data, connect any PostgreSQL client to `127.0.0.1:5432`, database `bookworm`, user `bookworm`.
+
+## Troubleshooting
+
+| Problem | Fix |
+|---|---|
+| API exits with "Cannot connect to PostgreSQL" | Start PostgreSQL and check `DATABASE_URL` in `backend/.env` |
+| Website shows "Cannot reach the server" | Start the API (`npm run dev:backend`) |
+| Port already in use | Change `PORT` in `backend/.env` (and the proxy target in `frontend/vite.config.ts`) |
+
+## Scope
+
+Built from the capstone brief and wireframes. Not included: admin screens, a real payment gateway, shipment tracking and returns.

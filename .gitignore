@@ -15,15 +15,11 @@ coverage/
 *.log
 npm-debug.log*
 
-# test artefacts
-playwright-report/
-test-results/
-
 # OS / editor
 .DS_Store
 Thumbs.db
 .idea/
 .vscode/
 
-# Bob tooling
+# IDE tooling
 .bob/

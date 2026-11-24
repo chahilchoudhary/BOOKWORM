@@ -1,9 +1,13 @@
-import { createApp } from './app.js';
+import { createApp, prepareDatabase } from './app.js';
 import { env } from './config/env.js';
-import { logger } from './lib/logger.js';
 
-const HOST = '127.0.0.1';
+try {
+  await prepareDatabase();
+} catch (e) {
+  console.error((e as Error).message);
+  process.exit(1);
+}
 
-createApp().listen(env.PORT, HOST, () => {
-  logger.info({ host: HOST, port: env.PORT }, 'Book Worm API listening');
+createApp().listen(env.PORT, '127.0.0.1', () => {
+  console.log(`Book Worm API running on http://localhost:${env.PORT}`);
 });

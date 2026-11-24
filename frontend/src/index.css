@@ -1,3 +1,94 @@
 @tailwind base;
 @tailwind components;
 @tailwind utilities;
+
+@layer base {
+  body {
+    @apply bg-canvas font-sans text-white antialiased;
+  }
+  a {
+    @apply focus-visible:outline focus-visible:outline-2 focus-visible:outline-primary;
+  }
+  button,
+  input,
+  select,
+  textarea {
+    @apply focus-visible:outline focus-visible:outline-2 focus-visible:outline-primary;
+  }
+}
+
+@layer components {
+  .btn {
+    @apply inline-flex items-center justify-center gap-2 px-4 py-3 text-sm text-white transition-colors disabled:cursor-not-allowed disabled:opacity-50;
+  }
+  .btn-primary {
+    @apply btn bg-primary hover:bg-primary-hover;
+  }
+  .btn-secondary {
+    @apply btn bg-field hover:bg-neutral-600;
+  }
+  .input {
+    @apply w-full border-b border-neutral-500 bg-field px-3 py-3 text-sm text-white placeholder:text-neutral-400;
+  }
+  .input-error {
+    @apply border-danger;
+  }
+  .label {
+    @apply mb-1 block text-xs text-muted;
+  }
+  /* one consistent look for every dropdown: no native arrow, our own chevron, same height as inputs */
+  select.input {
+    @apply h-11 cursor-pointer appearance-none truncate pr-9;
+    background-image: url("data:image/svg+xml;utf8,<svg xmlns='http://www.w3.org/2000/svg' width='16' height='16' viewBox='0 0 24 24' fill='none' stroke='%23c6c6c6' stroke-width='2' stroke-linecap='round' stroke-linejoin='round'><path d='m6 9 6 6 6-6'/></svg>");
+    background-repeat: no-repeat;
+    background-position: right 0.75rem center;
+  }
+  input.input {
+    @apply h-11;
+  }
+  select.input option {
+    @apply bg-panel text-white;
+  }
+  .link {
+    @apply text-link underline;
+  }
+  .panel {
+    @apply bg-panel p-5;
+  }
+  /* Slim dark scrollbar: nearly invisible at rest, visible when the pane is hovered or scrolled. */
+  .scroll-area {
+    overflow-y: auto;
+    scrollbar-gutter: stable;
+    scrollbar-width: thin; /* Firefox */
+    scrollbar-color: #393939 transparent;
+  }
+  .scroll-area:hover {
+    scrollbar-color: #6f6f6f transparent;
+  }
+  .scroll-area::-webkit-scrollbar {
+    width: 8px;
+  }
+  .scroll-area::-webkit-scrollbar-track {
+    background: transparent;
+  }
+  .scroll-area::-webkit-scrollbar-thumb {
+    background-color: #393939;
+    border-radius: 9999px;
+    border: 2px solid transparent;
+    background-clip: content-box;
+  }
+  .scroll-area:hover::-webkit-scrollbar-thumb {
+    background-color: #6f6f6f;
+  }
+  .scroll-area::-webkit-scrollbar-thumb:hover {
+    background-color: #8d8d8d;
+  }
+  .books-bg {
+    background-color: #123c69;
+    background-image:
+      radial-gradient(circle at 15% 25%, rgba(217, 119, 6, 0.55) 0 90px, transparent 91px),
+      radial-gradient(circle at 85% 15%, rgba(14, 116, 144, 0.6) 0 110px, transparent 111px),
+      radial-gradient(circle at 20% 90%, rgba(202, 138, 4, 0.55) 0 120px, transparent 121px),
+      radial-gradient(circle at 80% 85%, rgba(214, 196, 160, 0.55) 0 140px, transparent 141px);
+  }
+}
