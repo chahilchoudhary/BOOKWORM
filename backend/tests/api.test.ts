@@ -1,9 +1,10 @@
 import request from 'supertest';
-import { beforeAll, describe, expect, it } from 'vitest';
-import { createApp } from '../src/app.js';
-import { db } from '../src/db.js';
+import { afterAll, beforeAll, describe, expect, it } from 'vitest';
+import { createApp, prepareDatabase } from '../src/app.js';
+import { one, pool, resetDb } from '../src/db.js';
 
 const app = createApp();
+const stockOf = async (id: number) => (await one<{ stock: number }>('SELECT stock FROM books WHERE id = $1', [id]))!.stock;
 let token = '';
 const auth = () => ({ Authorization: `Bearer ${token}` });
 
@@ -13,6 +14,8 @@ const address = {
 };
 
 beforeAll(async () => {
+  await resetDb(); // wipes the *_test database only
+  await prepareDatabase();
   const res = await request(app).post('/api/auth/login').send({ email: 'new@bookworm.test', password: 'Password123!' });
   token = res.body.token;
 });
@@ -76,7 +79,7 @@ describe('cart -> checkout -> cancel', () => {
     expect(quote.body.quote.discount).toBe(100);
     expect((await request(app).post('/api/cart/quote').set(auth()).send({ couponCode: 'NOPE' })).body.quote.couponError).toBe('Invalid coupon code');
 
-    const stockBefore = (db.prepare('SELECT stock FROM books WHERE id = 7').get() as { stock: number }).stock;
+    const stockBefore = await stockOf(7);
 
     // declined card: cart stays, nothing created
     const declined = await request(app).post('/api/orders').set(auth()).send({ address, payment: { method: 'credit_card', cardNumber: '4000 0000 0000 0002' } });
@@ -89,12 +92,12 @@ describe('cart -> checkout -> cancel', () => {
     expect(ok.body.order.total).toBe(quote.body.quote.total);
     expect(ok.body.order.canCancel).toBe(true);
     expect((await request(app).get('/api/cart').set(auth())).body.items).toHaveLength(0);
-    expect((db.prepare('SELECT stock FROM books WHERE id = 7').get() as { stock: number }).stock).toBe(stockBefore - 1);
+    expect(await stockOf(7)).toBe(stockBefore - 1);
 
     // cancel restores stock, then can't cancel twice
     const id = ok.body.order.id;
     expect((await request(app).post(`/api/orders/${id}/cancel`).set(auth())).body.order.status).toBe('CANCELLED');
-    expect((db.prepare('SELECT stock FROM books WHERE id = 7').get() as { stock: number }).stock).toBe(stockBefore);
+    expect(await stockOf(7)).toBe(stockBefore);
     expect((await request(app).post(`/api/orders/${id}/cancel`).set(auth())).status).toBe(409);
 
     // buy it again refills the cart
@@ -117,4 +120,8 @@ describe('cart -> checkout -> cancel', () => {
     const res = await request(app).post('/api/orders').set(auth()).send({ address, payment: { method: 'wallet' } });
     expect(res.status).toBe(400);
   });
+});
+
+afterAll(async () => {
+  await pool.end();
 });

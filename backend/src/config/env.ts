@@ -1,7 +1,7 @@
 export const env = {
   PORT: Number(process.env.PORT ?? 4000),
   JWT_SECRET: process.env.JWT_SECRET ?? 'dev-only-secret-change-me',
-  DB_FILE: process.env.DB_FILE ?? 'bookworm.db',
+  DATABASE_URL: process.env.DATABASE_URL ?? 'postgres://bookworm:bookworm@127.0.0.1:5432/bookworm',
   CORS_ORIGIN: process.env.CORS_ORIGIN ?? 'http://localhost:5173',
 };
 

@@ -1,5 +1,5 @@
 import bcrypt from 'bcryptjs';
-import { db } from './db.js';
+import { one, pool } from './db.js';
 
 export const CATEGORIES = [
   'Romance', 'Mystery', 'Science Fiction', 'Fantasy', 'Historical', 'Biography', 'Self-help',
@@ -54,40 +54,52 @@ const books: B[] = [
   ['Love in Monsoon', 'Two strangers share one umbrella and one summer.', 5, 'Rosewood', 'Romance', 'Fiction,Love', 'eBook', 149, 330, '2025-09-09', '#0891b2'],
 ];
 
-export function seed(): void {
-  const count = db.prepare('SELECT COUNT(*) AS n FROM books').get() as { n: number };
-  if (count.n > 0) return;
+export async function seed(): Promise<void> {
+  const count = await one<{ n: number }>('SELECT COUNT(*) AS n FROM books');
+  if (count && count.n > 0) return;
 
-  const addAuthor = db.prepare('INSERT INTO authors (name, bio) VALUES (?, ?)');
-  for (const [name, bio] of authors) addAuthor.run(name, bio);
+  const client = await pool.connect();
+  try {
+    await client.query('BEGIN');
+    for (const [name, bio] of authors) {
+      await client.query('INSERT INTO authors (name, bio) VALUES ($1, $2)', [name, bio]);
+    }
+    for (const b of books) {
+      await client.query(
+        `INSERT INTO books (title, description, author_id, publisher, category, tags, format, price, units_sold, published_at, cover_color)
+         VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11)`,
+        b,
+      );
+    }
 
-  const addBook = db.prepare(
-    `INSERT INTO books (title, description, author_id, publisher, category, tags, format, price, units_sold, published_at, cover_color)
-     VALUES (?,?,?,?,?,?,?,?,?,?,?)`,
-  );
-  for (const b of books) addBook.run(...b);
+    const hash = bcrypt.hashSync('Password123!', 10);
+    await client.query('INSERT INTO users (name, email, password_hash, points) VALUES ($1,$2,$3,$4)', ['Demo User', 'demo@bookworm.test', hash, 500]);
+    await client.query('INSERT INTO users (name, email, password_hash, points) VALUES ($1,$2,$3,$4)', ['New User', 'new@bookworm.test', hash, 0]);
 
-  const addUser = db.prepare('INSERT INTO users (name, email, password_hash, points) VALUES (?,?,?,?)');
-  const hash = bcrypt.hashSync('Password123!', 10);
-  addUser.run('Demo User', 'demo@bookworm.test', hash, 500);
-  addUser.run('New User', 'new@bookworm.test', hash, 0);
+    await client.query('INSERT INTO coupons (code, type, value, min_order) VALUES ($1,$2,$3,$4)', ['WELCOME100', 'flat', 100, 300]);
+    await client.query('INSERT INTO coupons (code, type, value, min_order) VALUES ($1,$2,$3,$4)', ['SAVE10', 'percent', 10, 0]);
 
-  db.prepare('INSERT INTO coupons (code, type, value, min_order) VALUES (?,?,?,?)').run('WELCOME100', 'flat', 100, 300);
-  db.prepare('INSERT INTO coupons (code, type, value, min_order) VALUES (?,?,?,?)').run('SAVE10', 'percent', 10, 0);
+    // Demo user's order history (one old, one recent) so "Recommended for You" and "Cancel" can be shown.
+    const addr = { firstName: 'Demo', lastName: 'User', email: 'demo@bookworm.test', line1: '12 Park Street', city: 'Bengaluru', state: 'Karnataka', pin: '560001', country: 'India', phone: '9876543210', phoneCode: '+91' };
+    const addOrder = async (subtotal: number, tax: number, total: number, placedAt: Date, bookId: number) => {
+      const r = await client.query(
+        `INSERT INTO orders (user_id, status, subtotal, tax, delivery, discount, points_used, total, payment_method, address, placed_at)
+         VALUES (1,'CONFIRMED',$1,$2,0,0,0,$3,'credit_card',$4,$5) RETURNING id`,
+        [subtotal, tax, total, JSON.stringify(addr), placedAt.toISOString()],
+      );
+      await client.query('INSERT INTO order_items (order_id, book_id, quantity, unit_price) VALUES ($1,$2,1,$3)', [r.rows[0].id, bookId, subtotal]);
+    };
+    await addOrder(399, 48, 447, new Date(Date.now() - 10 * 86400000), 1);
+    await addOrder(259, 31, 290, new Date(Date.now() - 3600000), 2);
 
-  // Demo user's order history (one recent, one old) so "Recommended for You" and "Cancel" can be shown.
-  const addOrder = db.prepare(
-    `INSERT INTO orders (user_id, status, subtotal, tax, delivery, discount, points_used, total, payment_method, address, placed_at)
-     VALUES (1,'CONFIRMED',?,?,0,0,0,?, 'credit_card', ?, ?)`,
-  );
-  const addItem = db.prepare('INSERT INTO order_items (order_id, book_id, quantity, unit_price) VALUES (?,?,?,?)');
-  const addr = JSON.stringify({ firstName: 'Demo', lastName: 'User', line1: '12 Park Street', city: 'Bengaluru', state: 'Karnataka', pin: '560001', country: 'India', phone: '9876543210', email: 'demo@bookworm.test' });
-  const old = addOrder.run(399, 48, 447, addr, new Date(Date.now() - 10 * 86400000).toISOString());
-  addItem.run(Number(old.lastInsertRowid), 1, 1, 399);
-  const recent = addOrder.run(259, 31, 290, addr, new Date(Date.now() - 3600000).toISOString());
-  addItem.run(Number(recent.lastInsertRowid), 2, 1, 259);
-
-  db.prepare('INSERT INTO reviews (book_id, user_id, rating, body, created_at) VALUES (?,?,?,?,?)').run(
-    7, 1, 5, 'The accordion component delivers large amounts of content in a small space.', new Date().toISOString(),
-  );
+    await client.query('INSERT INTO reviews (book_id, user_id, rating, body) VALUES ($1,$2,$3,$4)', [
+      7, 1, 5, 'The accordion component delivers large amounts of content in a small space.',
+    ]);
+    await client.query('COMMIT');
+  } catch (e) {
+    await client.query('ROLLBACK');
+    throw e;
+  } finally {
+    client.release();
+  }
 }

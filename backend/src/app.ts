@@ -1,6 +1,7 @@
 import cors from 'cors';
 import express, { type Express } from 'express';
 import { env } from './config/env.js';
+import { initDb } from './db.js';
 import { errorHandler } from './http.js';
 import { authRouter } from './routes/auth.js';
 import { booksRouter } from './routes/books.js';
@@ -9,7 +10,6 @@ import { ordersRouter } from './routes/orders.js';
 import { seed } from './seed.js';
 
 export function createApp(): Express {
-  seed();
   const app = express();
   app.disable('x-powered-by');
   app.use(cors({ origin: env.CORS_ORIGIN }));
@@ -27,4 +27,10 @@ export function createApp(): Express {
   });
   app.use(errorHandler);
   return app;
+}
+
+/** Create the database/tables and load the demo data (first run only). */
+export async function prepareDatabase(): Promise<void> {
+  await initDb();
+  await seed();
 }

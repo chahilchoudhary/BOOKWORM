@@ -1,13 +1,14 @@
 # Book Worm – online bookstore
 
-React + Tailwind front end, Express API, SQLite database (single file, no install).
+React + Tailwind front end, Express API, PostgreSQL database.
 
 ## Run it (2 terminals)
 
-Requires Node 22.12+ (uses the built-in `node:sqlite`).
+Requires Node 22.12+ and a running PostgreSQL 14+ server.
 
 ```bash
 npm run setup            # once: installs backend + frontend packages
+cp backend/.env.example backend/.env    # then set DATABASE_URL if yours differs
 
 # terminal 1 – API on http://localhost:4000
 npm run dev:backend
@@ -16,7 +17,7 @@ npm run dev:backend
 npm run dev:frontend
 ```
 
-The database file `backend/bookworm.db` and the demo data are created automatically on first start. Delete the file to reset.
+On first start the API creates the `bookworm` database (if the Postgres user may), the tables and the demo data. To reset, drop the database and restart the API.
 
 ## Demo accounts and test data
 
@@ -35,6 +36,7 @@ Payments are simulated. No card data is stored or logged.
 
 ```bash
 npm test          # backend (pricing, API flow, 48h cancel) + frontend (routing, validation)
+                  # backend tests use a separate database named bookworm_test (wiped on every run)
 npm run typecheck
 ```
 
@@ -43,7 +45,7 @@ npm run typecheck
 ```
 backend/src
   app.ts, server.ts      express app + start
-  db.ts                  SQLite tables + transaction helper
+  db.ts                  PostgreSQL pool, query helpers, tables, transaction helper
   seed.ts                demo books, users, coupons
   pricing.ts             ALL price/coupon/points/cancel-window/payment rules (pure functions)
   http.ts                auth middleware, validation helper, error handler
@@ -70,7 +72,6 @@ docs/                    requirements, architecture notes, wireframes (docs/desi
 | 11–12 Confirmation, cancel within 48 h | `/confirmation/:id`, `/orders` (the server rejects cancels after 48 h) |
 
 ## Simplifications (on purpose)
-- SQLite instead of PostgreSQL so it runs with no install. All SQL is standard and confined to `backend/src`.
 - Totals are always calculated on the server (`pricing.ts`); the browser only displays them.
 - Dark theme only. No admin screens, real payment gateway, shipping tracking or returns.
 - "My Writers" lists authors of books you bought.

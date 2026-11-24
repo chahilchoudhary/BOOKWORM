@@ -1,7 +1,7 @@
 # Data model
 
 Designed by hand from the wireframes (the deck lists this step as manual). Implemented in `backend/src/db.ts`.
-SQLite is used so the project runs with no install; the SQL is standard and ports to PostgreSQL by changing types (`INTEGER PRIMARY KEY AUTOINCREMENT` → `SERIAL`, `TEXT` dates → `timestamptz`).
+PostgreSQL. Dates use `timestamptz`, the address snapshot is `jsonb`, ids are identity columns.
 
 ```mermaid
 erDiagram

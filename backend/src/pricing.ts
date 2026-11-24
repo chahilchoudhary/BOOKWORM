@@ -5,7 +5,7 @@ export interface CouponRow {
   type: 'percent' | 'flat';
   value: number;
   min_order: number;
-  expires_at: string | null;
+  expires_at: string | Date | null;
 }
 
 export interface Quote {
@@ -69,7 +69,7 @@ export function deliveryDate(format: string, from = new Date()): string | null {
 }
 
 /** True while an order may still be cancelled. */
-export function canCancel(status: string, placedAt: string, now = new Date()): boolean {
+export function canCancel(status: string, placedAt: string | Date, now = new Date()): boolean {
   if (status !== 'CONFIRMED') return false;
   const ageMs = now.getTime() - new Date(placedAt).getTime();
   return ageMs <= RULES.CANCEL_WINDOW_HOURS * 3600 * 1000;

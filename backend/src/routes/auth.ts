@@ -1,6 +1,6 @@
 import bcrypt from 'bcryptjs';
 import { Router } from 'express';
-import { db } from '../db.js';
+import { one, query } from '../db.js';
 import { HttpError, parse, requireAuth, signToken, wrap, z, type AuthedRequest } from '../http.js';
 
 export const authRouter = Router();
@@ -23,15 +23,16 @@ const registerSchema = z.object({
 
 authRouter.post(
   '/register',
-  wrap((req, res) => {
+  wrap(async (req, res) => {
     const { name, email, password } = parse(registerSchema, req.body);
-    if (db.prepare('SELECT 1 FROM users WHERE email = ?').get(email)) {
+    if (await one('SELECT 1 FROM users WHERE email = $1', [email])) {
       throw new HttpError(409, 'Email already registered');
     }
-    const info = db
-      .prepare('INSERT INTO users (name, email, password_hash) VALUES (?,?,?)')
-      .run(name, email, bcrypt.hashSync(password, 10));
-    const user = db.prepare('SELECT * FROM users WHERE id = ?').get(Number(info.lastInsertRowid)) as unknown as UserRow;
+    const user = await one<UserRow>(
+      'INSERT INTO users (name, email, password_hash) VALUES ($1,$2,$3) RETURNING *',
+      [name, email, bcrypt.hashSync(password, 10)],
+    );
+    if (!user) throw new HttpError(500, 'Could not create account');
     res.status(201).json({ token: signToken(user.id), user: publicUser(user) });
   }),
 );
@@ -43,9 +44,9 @@ const loginSchema = z.object({
 
 authRouter.post(
   '/login',
-  wrap((req, res) => {
+  wrap(async (req, res) => {
     const { email, password } = parse(loginSchema, req.body);
-    const user = db.prepare('SELECT * FROM users WHERE email = ?').get(email) as unknown as UserRow | undefined;
+    const user = await one<UserRow>('SELECT * FROM users WHERE email = $1', [email]);
     if (!user || !bcrypt.compareSync(password, user.password_hash)) {
       throw new HttpError(401, 'Wrong email or password');
     }
@@ -56,8 +57,8 @@ authRouter.post(
 authRouter.get(
   '/me',
   requireAuth,
-  wrap((req, res) => {
-    const user = db.prepare('SELECT * FROM users WHERE id = ?').get((req as AuthedRequest).userId) as unknown as UserRow | undefined;
+  wrap(async (req, res) => {
+    const user = await one<UserRow>('SELECT * FROM users WHERE id = $1', [(req as AuthedRequest).userId]);
     if (!user) throw new HttpError(401, 'Please log in');
     res.json({ user: publicUser(user) });
   }),
@@ -67,16 +68,15 @@ authRouter.get(
 authRouter.get(
   '/me/writers',
   requireAuth,
-  wrap((req, res) => {
-    const items = db
-      .prepare(
-        `SELECT a.id, a.name, a.bio, COUNT(DISTINCT b.id) AS books
-         FROM order_items oi
-         JOIN orders o ON o.id = oi.order_id AND o.status = 'CONFIRMED'
-         JOIN books b ON b.id = oi.book_id JOIN authors a ON a.id = b.author_id
-         WHERE o.user_id = ? GROUP BY a.id ORDER BY books DESC, a.name`,
-      )
-      .all((req as AuthedRequest).userId);
+  wrap(async (req, res) => {
+    const items = await query(
+      `SELECT a.id, a.name, a.bio, COUNT(DISTINCT b.id) AS books
+       FROM order_items oi
+       JOIN orders o ON o.id = oi.order_id AND o.status = 'CONFIRMED'
+       JOIN books b ON b.id = oi.book_id JOIN authors a ON a.id = b.author_id
+       WHERE o.user_id = $1 GROUP BY a.id ORDER BY books DESC, a.name`,
+      [(req as AuthedRequest).userId],
+    );
     res.json({ items });
   }),
 );
@@ -85,10 +85,11 @@ authRouter.get(
 authRouter.get(
   '/me/address',
   requireAuth,
-  wrap((req, res) => {
-    const row = db
-      .prepare('SELECT address FROM orders WHERE user_id = ? ORDER BY id DESC LIMIT 1')
-      .get((req as AuthedRequest).userId) as { address: string } | undefined;
-    res.json({ address: row ? JSON.parse(row.address) : null });
+  wrap(async (req, res) => {
+    const row = await one<{ address: unknown }>(
+      'SELECT address FROM orders WHERE user_id = $1 ORDER BY id DESC LIMIT 1',
+      [(req as AuthedRequest).userId],
+    );
+    res.json({ address: row ? row.address : null });
   }),
 );

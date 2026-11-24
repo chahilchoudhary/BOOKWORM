@@ -61,11 +61,10 @@ export function parse<T>(schema: ZodType<T>, data: unknown): T {
 export const wrap =
   (fn: (req: Request, res: Response) => unknown): RequestHandler =>
   (req, res, next) => {
-    try {
-      fn(req, res);
-    } catch (e) {
-      next(e);
-    }
+    // works for sync and async handlers; any thrown/rejected error goes to the error middleware
+    Promise.resolve()
+      .then(() => fn(req, res))
+      .catch(next);
   };
 
 export function errorHandler(err: unknown, _req: Request, res: Response, _next: NextFunction): void {
