@@ -27,3 +27,7 @@ Thumbs.db
 
 # Bob tooling
 .bob/
+
+# local SQLite databases
+*.db
+*.db-journal

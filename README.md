@@ -1,68 +1,76 @@
-# Book Worm
+# Book Worm – online bookstore
 
-Online bookstore: React SPA + Express REST API + PostgreSQL 16.
-Requirements, architecture and task plan live in [`docs/`](docs/) (start with `00-READ-FIRST-BOB-RULES.md`).
+React + Tailwind front end, Express API, SQLite database (single file, no install).
 
-Status: **T00 – repo scaffold only.** The API exposes `GET /api/health`; the frontend shows a placeholder page.
+## Run it (2 terminals)
 
-## Prerequisites
-
-- Node.js **22.12 or newer** (LTS) and npm
-- Docker with Compose (for PostgreSQL). The compose file pulls Red Hat images, so run `docker login registry.redhat.io` first.
-
-## Run
+Requires Node 22.12+ (uses the built-in `node:sqlite`).
 
 ```bash
-# 1. install all three package.json files (root hooks, backend, frontend)
-npm run setup
+npm run setup            # once: installs backend + frontend packages
 
-# 2. create local env files (git-ignored) from the examples
-cp backend/.env.example backend/.env      # Windows: Copy-Item backend/.env.example backend/.env
-cp frontend/.env.example frontend/.env    # Windows: Copy-Item frontend/.env.example frontend/.env
+# terminal 1 – API on http://localhost:4000
+npm run dev:backend
 
-# 3. start PostgreSQL (5432) and the test PostgreSQL (5433)
-docker compose up -d postgres postgres-test
-
-# 4. start API (http://127.0.0.1:4000) and web app (http://127.0.0.1:5173)
-npm run dev
+# terminal 2 – website on http://localhost:5173
+npm run dev:frontend
 ```
 
-Check it: `curl http://127.0.0.1:4000/api/health` returns `{"status":"ok"}`.
+The database file `backend/bookworm.db` and the demo data are created automatically on first start. Delete the file to reset.
 
-The backend validates its environment with zod in `backend/src/config/env.ts` and exits with a message listing every missing or invalid variable if `backend/.env` is absent or wrong.
-Change `JWT_SECRET` (min 32 characters) in your local `.env`; never commit `.env`.
+## Demo accounts and test data
 
-## Scripts
+| What | Value |
+|---|---|
+| Demo user (has order history + 500 gift points) | `demo@bookworm.test` / `Password123!` |
+| New user (no history) | `new@bookworm.test` / `Password123!` |
+| Coupons | `WELCOME100` (₹100 off, min ₹300) · `SAVE10` (10% off) |
+| Card that succeeds | `4111 1111 1111 1111` (any name, CVV 3 digits, expiry in the future `MM/YYYY`) |
+| Card that is declined | `4000 0000 0000 0002` |
+| UPI | any `name@bank` |
 
-Run from the repo root (each runs in both packages) or with `npm --prefix backend|frontend run <script>`.
+Payments are simulated. No card data is stored or logged.
 
-| Script              | What it does                          |
-| ------------------- | ------------------------------------- |
-| `npm run dev`       | API and web app together              |
-| `npm run lint`      | ESLint (typescript-eslint), 0 warnings |
-| `npm run typecheck` | `tsc --noEmit`, strict                |
-| `npm test`          | Vitest (one run)                      |
-| `npm run format`    | Prettier write                        |
+## Tests
 
-Per package: `build` (backend: `tsc` to `dist/`; frontend: `tsc` + `vite build`).
-
-A husky `pre-commit` hook runs lint-staged (ESLint + Prettier on staged files) and the type-check.
-
-## Layout
-
-```
-backend/    Express 4 + TypeScript API (src/app.ts builds the app, src/server.ts listens)
-frontend/   Vite + React 18 + TypeScript + Tailwind 3
-docs/       requirements, architecture, task plan, wireframes
+```bash
+npm test          # backend (pricing, API flow, 48h cancel) + frontend (routing, validation)
+npm run typecheck
 ```
 
-Full folder structure: `docs/02-ARCHITECTURE.md` §4.
+## Project layout
 
-## Databases
+```
+backend/src
+  app.ts, server.ts      express app + start
+  db.ts                  SQLite tables + transaction helper
+  seed.ts                demo books, users, coupons
+  pricing.ts             ALL price/coupon/points/cancel-window/payment rules (pure functions)
+  http.ts                auth middleware, validation helper, error handler
+  routes/                auth, books (catalogue + reviews), cart (+wishlist), orders
+backend/tests            pricing unit tests + API integration tests
+frontend/src
+  api.ts, auth.tsx, cart.tsx, hooks.ts, format.ts
+  components/            Navbar, Protected route, shared UI (cards, stars, covers)
+  pages/                 Home, Book, Cart/Checkout, Payment, Confirmation, Orders, Wishlist, Authors, Login/Register
+docs/                    requirements, architecture notes, wireframes (docs/design)
+```
 
-| Service         | Host port | Database        | Used for            |
-| --------------- | --------- | --------------- | ------------------- |
-| `postgres`      | 5432      | `bookworm`      | development         |
-| `postgres-test` | 5433      | `bookworm_test` | automated tests     |
+## Customer journey (from the brief) → where it is
 
-Both listen on `127.0.0.1` only. Default credentials (`bookworm` / `bookworm`) are for local development; override with `POSTGRES_USER`, `POSTGRES_PASSWORD` in a git-ignored root `.env`.
+| Step | Where |
+|---|---|
+| 1–2 Login / authentication | `/login`, `/register`; guests are redirected from protected pages |
+| Order history + Buy it again, recommendations | `/orders`; "Recommended for You" on Home is based on past orders |
+| 3, 5, 6 Catalogue, categories, brands | Home: category sidebar, filter bar (language, format, publisher, price, sort) |
+| 7 Product with delivery date + related products | `/books/:id` |
+| 8 Add to basket | Add to Cart (navbar badge updates) |
+| 9 Delivery address | Cart/Checkout page, "Use Saved Address" |
+| 10 Payment option + gift points | Gift points on checkout; `/payment` tabs Credit/Debit/UPI/Wallet |
+| 11–12 Confirmation, cancel within 48 h | `/confirmation/:id`, `/orders` (the server rejects cancels after 48 h) |
+
+## Simplifications (on purpose)
+- SQLite instead of PostgreSQL so it runs with no install. All SQL is standard and confined to `backend/src`.
+- Totals are always calculated on the server (`pricing.ts`); the browser only displays them.
+- Dark theme only. No admin screens, real payment gateway, shipping tracking or returns.
+- "My Writers" lists authors of books you bought.

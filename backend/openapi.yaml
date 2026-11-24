@@ -1,22 +1,225 @@
 openapi: 3.0.3
 info:
   title: Book Worm API
-  version: 0.0.0
+  version: 1.0.0
+  description: "Online bookstore API. Money is whole rupees. Errors are {\"error\": \"message\"}."
 servers:
   - url: http://localhost:4000/api
+components:
+  securitySchemes:
+    bearer: { type: http, scheme: bearer, bearerFormat: JWT }
+  responses:
+    Error:
+      description: Error
+      content:
+        application/json:
+          schema: { type: object, properties: { error: { type: string } } }
+  schemas:
+    User:
+      type: object
+      properties: { id: { type: integer }, name: { type: string }, email: { type: string }, points: { type: integer } }
+    Book:
+      type: object
+      properties:
+        id: { type: integer }
+        title: { type: string }
+        description: { type: string }
+        author: { type: object, properties: { id: { type: integer }, name: { type: string } } }
+        publisher: { type: string }
+        category: { type: string }
+        tags: { type: array, items: { type: string } }
+        format: { type: string, enum: [Paperback, Hardcover, eBook] }
+        language: { type: string }
+        price: { type: integer }
+        inStock: { type: boolean }
+        unitsSold: { type: integer }
+        rating: { type: number }
+        deliveryDate: { type: string, format: date, nullable: true, description: null for eBooks }
+    Quote:
+      type: object
+      properties:
+        subtotal: { type: integer }
+        discount: { type: integer }
+        pointsUsed: { type: integer }
+        tax: { type: integer }
+        delivery: { type: integer }
+        total: { type: integer }
+        couponError: { type: string }
+    Cart:
+      type: object
+      properties:
+        items: { type: array, items: { type: object, properties: { book: { $ref: '#/components/schemas/Book' }, quantity: { type: integer } } } }
+        quote: { $ref: '#/components/schemas/Quote' }
+        pointsBalance: { type: integer }
+    Address:
+      type: object
+      required: [firstName, lastName, email, line1, city, state, pin, country, phone]
+      properties:
+        firstName: { type: string }
+        lastName: { type: string }
+        email: { type: string, format: email }
+        line1: { type: string }
+        line2: { type: string }
+        city: { type: string }
+        state: { type: string }
+        pin: { type: string, pattern: '^\d{6}$' }
+        country: { type: string }
+        phone: { type: string, pattern: '^\d{10}$' }
+        phoneCode: { type: string, default: '+91' }
+    Order:
+      type: object
+      properties:
+        id: { type: integer }
+        status: { type: string, enum: [CONFIRMED, CANCELLED] }
+        total: { type: integer }
+        placedAt: { type: string, format: date-time }
+        canCancel: { type: boolean, description: true only while CONFIRMED and within 48 hours }
+        items: { type: array, items: { type: object } }
+security: []
 paths:
   /health:
-    get:
-      summary: Liveness check
+    get: { summary: Liveness, responses: { '200': { description: ok } } }
+  /auth/register:
+    post:
+      summary: Create an account
+      requestBody:
+        required: true
+        content: { application/json: { schema: { type: object, required: [name, email, password], properties: { name: { type: string }, email: { type: string }, password: { type: string, minLength: 8 } } } } }
       responses:
-        '200':
-          description: API is up
-          content:
-            application/json:
-              schema:
-                type: object
-                required: [status]
-                properties:
-                  status:
-                    type: string
-                    enum: [ok]
+        '201': { description: '{ token, user }' }
+        '400': { $ref: '#/components/responses/Error' }
+        '409': { $ref: '#/components/responses/Error' }
+  /auth/login:
+    post:
+      summary: Log in
+      requestBody:
+        required: true
+        content: { application/json: { schema: { type: object, required: [email, password], properties: { email: { type: string }, password: { type: string } } } } }
+      responses:
+        '200': { description: '{ token, user }' }
+        '401': { $ref: '#/components/responses/Error' }
+  /auth/me:
+    get: { summary: Current user, security: [{ bearer: [] }], responses: { '200': { description: '{ user }' }, '401': { $ref: '#/components/responses/Error' } } }
+  /auth/me/address:
+    get: { summary: Address from the user's last order (for "Use Saved Address"), security: [{ bearer: [] }], responses: { '200': { description: '{ address | null }' } } }
+  /auth/me/writers:
+    get: { summary: Authors of books the user has bought, security: [{ bearer: [] }], responses: { '200': { description: '{ items }' } } }
+  /categories:
+    get: { summary: Category names, responses: { '200': { description: '{ categories }' } } }
+  /publishers:
+    get: { summary: Publisher (brand) names, responses: { '200': { description: '{ publishers }' } } }
+  /books:
+    get:
+      summary: Search, filter, sort and paginate books
+      parameters:
+        - { name: q, in: query, schema: { type: string }, description: title or author }
+        - { name: category, in: query, schema: { type: string } }
+        - { name: language, in: query, schema: { type: string } }
+        - { name: format, in: query, schema: { type: string } }
+        - { name: publisher, in: query, schema: { type: string } }
+        - { name: min, in: query, schema: { type: integer } }
+        - { name: max, in: query, schema: { type: integer } }
+        - { name: sort, in: query, schema: { type: string, enum: [relevance, priceAsc, priceDesc, newest, rating] } }
+        - { name: page, in: query, schema: { type: integer, default: 1 } }
+        - { name: pageSize, in: query, schema: { type: integer, default: 12, maximum: 50 } }
+      responses:
+        '200': { description: '{ items, page, pageSize, total }' }
+        '400': { $ref: '#/components/responses/Error' }
+  /books/shelves:
+    get: { summary: Home shelves (recommended uses order history when logged in), responses: { '200': { description: '{ recommended, bestsellers, newLaunches }' } } }
+  /books/{id}:
+    get:
+      summary: Book detail
+      parameters: [{ name: id, in: path, required: true, schema: { type: integer } }]
+      responses: { '200': { description: '{ book, author }' }, '404': { $ref: '#/components/responses/Error' } }
+  /books/{id}/related:
+    get:
+      summary: Three related books
+      parameters: [{ name: id, in: path, required: true, schema: { type: integer } }]
+      responses: { '200': { description: '{ items }' } }
+  /books/{id}/reviews:
+    parameters: [{ name: id, in: path, required: true, schema: { type: integer } }]
+    get: { summary: Reviews, responses: { '200': { description: '{ items }' } } }
+    post:
+      summary: Add a review (one per user per book)
+      security: [{ bearer: [] }]
+      requestBody:
+        required: true
+        content: { application/json: { schema: { type: object, required: [rating, body], properties: { rating: { type: integer, minimum: 1, maximum: 5 }, body: { type: string, maxLength: 100 } } } } }
+      responses: { '201': { description: created }, '400': { $ref: '#/components/responses/Error' }, '401': { $ref: '#/components/responses/Error' }, '409': { $ref: '#/components/responses/Error' } }
+  /authors/{id}:
+    get:
+      summary: Author and their books
+      parameters: [{ name: id, in: path, required: true, schema: { type: integer } }]
+      responses: { '200': { description: '{ author, books }' }, '404': { $ref: '#/components/responses/Error' } }
+  /cart:
+    get: { summary: Cart with server-calculated totals, security: [{ bearer: [] }], responses: { '200': { description: Cart, content: { application/json: { schema: { $ref: '#/components/schemas/Cart' } } } } } }
+  /cart/quote:
+    post:
+      summary: Preview totals with a coupon and/or gift points
+      security: [{ bearer: [] }]
+      requestBody:
+        content: { application/json: { schema: { type: object, properties: { couponCode: { type: string }, pointsToRedeem: { type: integer, minimum: 0 } } } } }
+      responses: { '200': { description: Cart, content: { application/json: { schema: { $ref: '#/components/schemas/Cart' } } } } }
+  /cart/items/{bookId}:
+    parameters: [{ name: bookId, in: path, required: true, schema: { type: integer } }]
+    put:
+      summary: Set quantity (1-10, within stock)
+      security: [{ bearer: [] }]
+      requestBody:
+        required: true
+        content: { application/json: { schema: { type: object, required: [quantity], properties: { quantity: { type: integer, minimum: 1, maximum: 10 } } } } }
+      responses: { '200': { description: Cart }, '409': { $ref: '#/components/responses/Error' } }
+    delete: { summary: Remove from cart, security: [{ bearer: [] }], responses: { '200': { description: Cart } } }
+  /wishlist:
+    get: { summary: Wishlist, security: [{ bearer: [] }], responses: { '200': { description: '{ items }' } } }
+  /wishlist/{bookId}:
+    parameters: [{ name: bookId, in: path, required: true, schema: { type: integer } }]
+    put: { summary: Add to wishlist, security: [{ bearer: [] }], responses: { '200': { description: ok } } }
+    delete: { summary: Remove from wishlist, security: [{ bearer: [] }], responses: { '200': { description: ok } } }
+  /orders:
+    post:
+      summary: Checkout. Prices on the server, mock payment, then order is created in one transaction.
+      security: [{ bearer: [] }]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [address, payment]
+              properties:
+                address: { $ref: '#/components/schemas/Address' }
+                couponCode: { type: string }
+                pointsToRedeem: { type: integer }
+                payment:
+                  type: object
+                  required: [method]
+                  properties:
+                    method: { type: string, enum: [credit_card, debit_card, upi, wallet] }
+                    cardNumber: { type: string, description: 'Demo: 4111111111111111 succeeds, 4000000000000002 is declined. Never stored.' }
+                    upiId: { type: string }
+      responses:
+        '201': { description: '{ order }' }
+        '400': { $ref: '#/components/responses/Error' }
+        '402': { description: Payment declined }
+        '409': { description: Out of stock }
+    get: { summary: Order history, security: [{ bearer: [] }], responses: { '200': { description: '{ items }' } } }
+  /orders/{id}:
+    get:
+      summary: One of your orders
+      security: [{ bearer: [] }]
+      parameters: [{ name: id, in: path, required: true, schema: { type: integer } }]
+      responses: { '200': { description: '{ order }' }, '404': { $ref: '#/components/responses/Error' } }
+  /orders/{id}/cancel:
+    post:
+      summary: Cancel within 48 hours of placing. Refunds, restocks and returns gift points.
+      security: [{ bearer: [] }]
+      parameters: [{ name: id, in: path, required: true, schema: { type: integer } }]
+      responses: { '200': { description: '{ order }' }, '404': { $ref: '#/components/responses/Error' }, '409': { description: Window passed or already cancelled } }
+  /orders/{id}/buy-again:
+    post:
+      summary: Put the items of a past order back in the cart
+      security: [{ bearer: [] }]
+      parameters: [{ name: id, in: path, required: true, schema: { type: integer } }]
+      responses: { '200': { description: Cart } }

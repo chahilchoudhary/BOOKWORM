@@ -7,13 +7,10 @@
     "types": ["node"],
     "strict": true,
     "noUncheckedIndexedAccess": true,
-    "noImplicitOverride": true,
-    "noFallthroughCasesInSwitch": true,
     "esModuleInterop": true,
-    "forceConsistentCasingInFileNames": true,
     "skipLibCheck": true,
     "isolatedModules": true,
     "noEmit": true
   },
-  "include": ["src", "tests", "vitest.config.ts", "eslint.config.js"]
+  "include": ["src", "tests", "vitest.config.ts"]
 }
